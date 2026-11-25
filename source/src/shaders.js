@@ -38,7 +38,7 @@ fn seg3(p: vec3f, a: vec3f, b: vec3f) -> f32 { let pa = p - a; let ba = b - a; l
 fn dens(p: vec3f) -> f32 {
   let w = vec3f(fbm(p * .04 + 11., 3), fbm(p * .04 + 47., 3), fbm(p * .04 + 83., 3)) - .5;
   let q = p + w * vec3f(15., 6., 15.);
-  let g0 = -45.5 + 7. * (fbm(vec3f(q.xz * .011, 3.), 4) - .5) + 1.6 * (fbm(vec3f(q.xz * .07, 9.), 3) - .5);
+  let g0 = -45.5 + 10. * (fbm(vec3f(q.xz * .011, 3.), 4) - .5) + 2. * (fbm(vec3f(q.xz * .07, 9.), 3) - .5);
   let tn = 3. * (fbm(vec3f(q.xz * .09, 2.), 3) - .5);
   var dm = -1e3; var de = 1e3;
   var k = 0u;
@@ -59,8 +59,8 @@ fn dens(p: vec3f) -> f32 {
   let rad = length(p.xz) + w.x * 14.;
   let n = fbm(vec3f(q.xz * .0125, 1.7), 4);
   let ring = ss(156., 172., rad);
-  let plat = max(ss(.5, .565, n) * (1. - clr), ring);
-  let th = g0 + plat * mix(26. + 17. * fbm(vec3f(q.xz * .03, 5.), 2), 60., ring);
+  let plat = max(ss(.57, .635, n) * (1. - clr), ring);
+  let th = g0 + plat * mix(13. + 18. * fbm(vec3f(q.xz * .03, 5.), 2), 60., ring);
   var d = smax(g0 + 4.5 * ss(10., 0., de) - p.y, dm, 3.);
   d = smax(d, (th - p.y) * .7, 3.);
   k = u.c.x * 2u;
@@ -72,7 +72,7 @@ fn dens(p: vec3f) -> f32 {
     d = smax(d, b.y - length(vec2f(length(r.xy) - b.x, r.z)), 1.5);
   }
   let hg = p.y - g0;
-  let rk = mix(.25, 1., ss(.5, 5., hg));
+  let rk = mix(.16, 1., ss(.5, 5., hg));
   d += rk * ((.5 - wor(p * .17 + w * 2.)) * 3.4 + (.5 - wor(p * .41 + 7.)) * 1.3 + (fbm(p * .3, 3) - .5) * 2.2);
   d += rk * 2.2 * (abs(fract(p.y * .21 + w.y * 2.2) - .5) - .25);
   for (var i = 0u; i < u.c.z; i++) {
@@ -158,20 +158,16 @@ fn kar(c: vec3f) -> vec4f { let w = 1. / (1. + max(c.r, max(c.g, c.b))); return 
 }
 `;
 
-// animated water texture: r = caustic, ba = surface slope
+// animated light texture: r = sun patches under the canopy (ba unused)
 const W_WATER = W_FS + /*wgsl*/`
 @group(0) @binding(0) var<uniform> tm: vec4f;
+// light through the canopy: soft patches of sun that drift as the leaves move (periodic in uv)
 fn caus(uv: vec2f, t: f32) -> f32 {
   let p = uv * 6.2831853;
-  var i = p; var c = 0.;
-  for (var n = 1; n <= 5; n++) {
-    let tt = t * (1. - 3.5 / f32(n));
-    i = p + vec2f(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
-    let s = sin(i.x + tt); let k = cos(i.y + tt);
-    c += abs(s * k) / (1.25 * sqrt(s * s + k * k) + 1e-4);
-  }
-  c = 1.17 - pow(c / 5., 1.4);
-  return pow(abs(c), 8.);
+  let q = p + .55 * vec2f(sin(p.y * 2. + t * .7) + sin(p.x * 3. - t * .45), cos(p.x * 2. - t * .6) + cos(p.y * 3. + t * .35));
+  let c = sin(q.x * 3. + 1.) * sin(q.y * 3. + 2.) + .7 * sin(q.x * 5. + q.y * 2. + t * .25) * sin(q.y * 7. - q.x + 4.) + .45 * sin(q.x * 11. + 3.) * sin(q.y * 13. + t * .3);
+  let v = clamp((c * .6 + .12) / .75, 0., 1.);
+  return v * v * (3. - 2. * v);
 }
 const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1., .6), vec3f(1., -4., .5), vec3f(4., 3., .4),
   vec3f(-3., 5., .32), vec3f(6., -2., .28), vec3f(5., 7., .2), vec3f(-8., 3., .18), vec3f(2., 11., .14));
@@ -191,12 +187,12 @@ const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1.,
 // ---------------------------------------------------------------- shared scene code
 const S_G = /*wgsl*/`
 struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f };
-const SIG = vec3f(.058, .0235, .0195);
-const KD = vec3f(.056, .0245, .0170);
-const WCOL = vec3f(.16, .58, .90);
-const KDZ = vec3f(.034, .023, .018);
-const PCOL = vec3f(.58, .66, .98);
-const SUNC = vec3f(1.7, 1.6, 1.45);
+const SIG = vec3f(.0140, .0145, .0165);
+const KD = vec3f(.012, .011, .016);
+const WCOL = vec3f(.62, .69, .70);
+const KDZ = vec3f(.020, .012, .010);
+const PCOL = vec3f(.56, .76, .96);
+const SUNC = vec3f(2.3, 1.85, 1.3);
 const TAU = 6.2831853;
 const LOW = ${LV > 1};
 fn sat(x: f32) -> f32 { return clamp(x, 0., 1.); }
@@ -204,16 +200,16 @@ fn ss(a: f32, b: f32, x: f32) -> f32 { let t = clamp((x - a) / (b - a), 0., 1.);
 fn ign(p: vec2f) -> f32 { return fract(52.9829189 * fract(dot(p, vec2f(.06711056, .00583715)))); }
 fn hs(x: f32) -> f32 { return fract(sin(x * 127.1) * 43758.5453); }
 fn kd(z: f32) -> vec3f { return mix(KD, KDZ, z); }
-fn sg(z: f32) -> vec3f { return mix(SIG, vec3f(.034, .026, .022), z); }
+fn sg(z: f32) -> vec3f { return mix(SIG, vec3f(.019, .0165, .015), z); }
 fn fin(c: vec3f) -> vec4f { return vec4f(min(max(c, vec3f(0.)), vec3f(40.)), 1.); }
-const KDF = vec3f(.043, .045, .042);
+const KDF = vec3f(.013, .012, .012);
 fn fogIn(ro: vec3f, rd: vec3f, d: f32, z: f32, sun: vec3f) -> vec3f {
   let k = mix(KD, KDF, z);
   let a = sg(z) - k * rd.y;
   let I = (1. - exp(-a * d)) / a;
   let mu = max(dot(rd, sun), 0.);
   let m2 = mu * mu;
-  return mix(WCOL, PCOL, z) * sg(z) * exp(k * ro.y) * I * (1.22 + .3 * m2 * m2);
+  return mix(WCOL, PCOL, z) * sg(z) * exp(k * ro.y) * I * (vec3f(1.05) + vec3f(1.1, .75, .4) * m2 * m2);
 }
 `;
 
@@ -243,22 +239,21 @@ fn shadow9(p: vec3f) -> f32 {
 fn cuv(p: vec3f) -> vec2f { return p.xz - g.sun.xz * (p.y / g.sun.y); }
 fn caus(p: vec3f, d: f32) -> vec3f {
   let q = cuv(p);
-  let o = vec2f(.004, .0025);
-  let a = vec3f(textureSample(tW, sR, q / 3.3 + o).r, textureSample(tW, sR, q / 3.3).r, textureSample(tW, sR, q / 3.3 - o).r);
-  let b = textureSample(tW, sR, q.yx / 6.9 + .37).r;
-  let c = min(pow(a, vec3f(2.3)) * 5. * (.45 + b * 1.3), vec3f(4.));
-  return mix(c, vec3f(.33), ss(35., 100., d));
+  let a = textureSample(tW, sR, q / 9.).r;
+  let b = textureSample(tW, sR, q.yx / 23. + .37).r;
+  let c = min(pow(a, 1.6) * 1.7 * (.45 + b * 1.3), 4.);
+  return vec3f(mix(c, .4, ss(35., 100., d)));
 }
 fn caus2(p: vec3f, d: f32) -> f32 {
   let q = cuv(p);
-  let c = min(pow(textureSample(tW, sR, q / 4.1).r, 1.4) * 2.6 * (.45 + textureSample(tW, sR, q.yx / 6.9 + .37).r * 1.3), 2.6);
-  return mix(c, .33, ss(35., 100., d));
+  let c = min(pow(textureSample(tW, sR, q / 9.).r, 1.4) * 1.5 * (.45 + textureSample(tW, sR, q.yx / 23. + .37).r * 1.3), 2.6);
+  return mix(c, .4, ss(35., 100., d));
 }
 fn sunE(y: f32, z: f32) -> vec3f { return SUNC * exp(kd(z) * (min(y, 0.) / g.sun.y)) * (.5 + .5 * sat(-y / 30.)); }
 fn vol(p: vec3f) -> vec4f { return textureSampleLevel(tV, sC, (p - vec3f(-192., -56., -192.)) / vec3f(384., 60., 384.), 0.); }
 fn amb(p: vec3f, n: vec3f, sky: f32, z: f32) -> vec3f {
   let up = n.y * .5 + .5;
-  return mix(vec3f(.22, .60, .80), vec3f(.34, .56, .82), z) * exp(kd(z) * min(p.y, 0.) * 1.2) * (.3 + .7 * sky) * (.24 + .76 * up * up) * 1.3 * (.55 + .45 * sat(-p.y / 30.)) + vec3f(.003, .010, .016);
+  return mix(vec3f(.62, .74, .60), vec3f(.45, .66, .86), z) * exp(kd(z) * min(p.y, 0.) * 1.2) * (.3 + .7 * sky) * (.24 + .76 * up * up) * 1.3 * (.55 + .45 * sat(-p.y / 30.)) + vec3f(.006, .008, .005);
 }
 fn zone(p: vec3f) -> f32 { return mix(g.sun.w, textureSampleLevel(tM, sC, p.xz / 384. + .5, 0.).b, .2); }
 fn side(p: vec3f, n: vec3f, open: f32, z: f32) -> vec3f { return mix(WCOL, PCOL, z) * exp(kd(z) * min(p.y, 0.)) * open * (1. - abs(n.y)) * .7; }
@@ -314,53 +309,63 @@ fn tri(p: vec3f, n: vec3f, s: f32) -> TP {
   var bump = 1.7; var gloss = .1; var alb = vec3f(0.); var emi = vec3f(0.); var vao = 1.; var flu = 0.;
   let flt = ss(.72, .93, n0.y);
   if (mat <= 1) {
-    // layered rock: grey / olive / brown beds, warm encrustation patches, algae on up-facing parts
+    // layered rock: grey / olive / brown beds, patches of lichen, moss on up-facing parts
     let st = i.op.y * .55 + A.h * 1.6 + big * 5. + big2 * 3.;
     let bed = hs(floor(st)); let sf = fract(st);
     alb = mix(vec3f(.11, .12, .13), vec3f(.33, .30, .25), sat(A.c * 1.5 - .25));
     alb = mix(alb, mix(vec3f(.26, .19, .10), vec3f(.20, .22, .14), bed), ss(.42, .66, big) * .7);
     alb *= mix(.72, 1.15, bed) * (1. - .45 * ss(.12, .0, sf) * (1. - abs(on.y)));
     let enc = ss(.46, .6, big2 * .6 + B.c * .5) * ss(.3, .6, hgt);
-    alb = mix(alb, mix(vec3f(.34, .07, .10), vec3f(.40, .25, .07), ss(.45, .6, A.c)) * (.5 + .8 * B.h), enc * .75);
+    alb = mix(alb, mix(vec3f(.30, .32, .22), vec3f(.42, .30, .08), ss(.45, .6, A.c)) * (.5 + .8 * B.h), enc * .75);
     alb = mix(alb, vec3f(.50, .50, .46) * (.5 + .7 * C.h), ss(.60, .70, B.c * .6 + C.c * .5) * .5);
-    let alg = ss(-.1, .6, n0.y) * ss(.3, .52, B.c * .55 + big * .5);
-    alb = mix(alb, vec3f(.035, .14, .07), alg * .8);
+    let alg = ss(-.25, .5, n0.y) * ss(.22, .46, B.c * .55 + big * .5);
+    alb = mix(alb, vec3f(.055, .125, .028) * (.6 + .7 * C.h), alg * .85);
     alb *= (.22 + 1.3 * hgt) * mix(1., .62 + .76 * F.h, fk);
     sgro = -ss(.14, .0, sf) * (1. - abs(on.y)) * 1.2;
     if (mat == 0) {
-      alb = mix(alb, vec3f(.13, .15, .14) * (.55 + .6 * B.h), flt * gm.a * .7);
-      let mg = flt * sat(gm.r * 1.5 - .45 + (B.c - .5) * 1.6) * ss(.35, .6, A.h) * ss(-34., -40., i.wp.y);
-      alb = mix(alb, vec3f(.20, .02, .12) * (.4 + .9 * B.h), mg * .8);
-      flu = mg * .35;
-      alb = mix(alb, alb * vec3f(.85, .8, 1.4) + vec3f(.015, .0, .05), gm.b * .8);
+      // forest floor: soil and leaf litter, grass under the flower meadows, a cooler cast in the blue glade
+      alb = mix(alb, mix(vec3f(.10, .062, .032), vec3f(.20, .13, .055), C.h) * (.5 + .8 * B.h), flt * ss(.25, .6, gm.a * .7 + big2 * .5) * .92);
+      let mg = flt * sat(gm.r * 1.5 - .45 + (B.c - .5) * 1.6) * ss(.35, .6, A.h);
+      alb = mix(alb, vec3f(.06, .15, .03) * (.4 + .9 * B.h), mg * .8);
+      alb = mix(alb, alb * vec3f(.8, .95, 1.3) + vec3f(.0, .012, .03), gm.b * .8);
     }
   } else if (mat == 2) {
-    // whale fluke: smooth pale stone with dark streaks running along its length
+    // smooth pale stone with dark streaks (not used by this scene)
     alb = mix(vec3f(.42, .47, .48), vec3f(.10, .13, .15), ss(.40, .62, sk.a * .6 + sk2.b * .5)) * (.75 + .3 * B.h);
     alb = mix(alb, vec3f(.60, .64, .62), ss(.62, .75, sk2.a) * .5);
     gloss = .9; bump = .3;
   } else if (mat == 3) {
-    alb = mix(vec3f(.13, .085, .05), vec3f(.36, .25, .14), Wd.b) * (.6 + .5 * B.h);
-    let pk = fract(atan2(i.op.z, 2. - i.op.y) * 7.);
-    alb *= .35 + .65 * ss(0., .12, min(pk, 1. - pk));
-    alb = mix(alb, vec3f(.08, .22, .16), ss(.5, .7, A.c) * .6);
+    // shrine gate: weathered vermilion wood, moss creeping up it
+    alb = mix(vec3f(.26, .045, .03), vec3f(.52, .10, .05), Wd.b) * (.6 + .5 * B.h);
+    alb = mix(alb, vec3f(.07, .16, .05), ss(.5, .7, A.c) * .55);
     gloss = .2; bump = .7;
   } else if (mat == 4) {
+    // mushrooms: aux separates the pale stem and gills from the coloured, warty cap
     let hue = fract(sd * 7.31);
-    alb = mix(vec3f(.60, .17, .08), vec3f(.64, .35, .10), fract(hue * 3.));
-    if (hue > .75) { alb = vec3f(.44, .18, .42); }
-    alb *= (.45 + .75 * B.h) * (.7 + .3 * C.h);
-    vao = i.ao * i.ao; gloss = .2; bump = 1.4; flu = .55;
+    var cap = mix(vec3f(.62, .10, .05), vec3f(.66, .36, .10), fract(hue * 3.));
+    if (hue > .7) { cap = vec3f(.46, .30, .52); }
+    if (hue > .88) { cap = vec3f(.72, .64, .46); }
+    cap = mix(cap, vec3f(.92, .88, .76), ss(.60, .68, C.c) * .85);
+    alb = mix(vec3f(.70, .62, .48), cap, ss(.62, .78, i.ao)) * (.5 + .7 * B.h);
+    vao = .35 + .65 * i.ao * i.ao; gloss = .35; bump = .8; flu = .25;
+  } else if (mat == 6) {
+    // bark: ridges running up the trunk, moss low down and on the upper sides of the boughs
+    let hy = i.op.y - sd * 37.;
+    alb = mix(vec3f(.075, .05, .032), vec3f(.26, .19, .13), sk.b) * (.5 + .8 * sk2.a) * (.6 + .5 * B.h);
+    let ms = ss(.5, .72, B.c * .5 + big * .55 + .3 * ss(14., 0., hy)) * (.45 + .55 * sat(n0.y + .55));
+    alb = mix(alb, vec3f(.065, .13, .03) * (.5 + .9 * C.h), ms * .75);
+    gloss = .06; bump = 1.5;
   } else {
+    // coral fungus
     let hue = fract(sd * 5.73);
-    alb = mix(vec3f(.80, .08, .10), vec3f(.90, .22, .40), fract(hue * 4.));
-    if (hue > .7) { alb = vec3f(.88, .42, .10); }
-    if (hue > .9) { alb = vec3f(.55, .22, .75); }
+    alb = mix(vec3f(.85, .30, .06), vec3f(.90, .62, .14), fract(hue * 4.));
+    if (hue > .7) { alb = vec3f(.86, .78, .56); }
+    if (hue > .9) { alb = vec3f(.50, .25, .70); }
     alb *= (.4 + .8 * B.h) * (.5 + .9 * i.ao * i.ao);
-    alb = mix(alb, vec3f(1., .75, .6), ss(.8, 1., i.ao) * .35);
-    emi = alb * .01; flu = .75; gloss = .25; bump = 1.5;
+    alb = mix(alb, vec3f(1., .9, .7), ss(.8, 1., i.ao) * .35);
+    emi = alb * .01; flu = .4; gloss = .25; bump = 1.5;
   }
-  let rip = select(0., flt * gm.a * cos((i.wp.x * .8 + i.wp.z * .35) * 5. + A.c * 9.) * .65, mat == 0);
+  let rip = 0.;
   let N = normalize(qrot(i.q, normalize(on + (A.n * .85 + B.n * .65 + C.n * .45 * ss(60., 12., dist) + F.n * .5 * fk) * bump + vec3f(.8, sgro, .35) * vec3f(rip, 1., rip))));
   let L = g.sun.xyz; let V = normalize(g.cam.xyz - i.wp);
   let v1 = vol(i.wp + n0 * 1.5); let v2 = vol(i.wp + n0 * 4.5);
@@ -388,15 +393,15 @@ struct LO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n
   @location(5) @interpolate(flat) sd: vec2f, @location(6) @interpolate(flat) spc: vec3f };
 fn sway(p: vec2f, h: f32, t: f32) -> vec2f {
   let ph = dot(p, vec2f(.031, .017));
-  let a = .024 * pow(max(h, 0.), 1.25);
+  let a = .005 * pow(max(h, 0.), 1.25);
   return a * (vec2f(sin(t * .5 + ph + h * .09), cos(t * .37 + ph * 1.3 + h * .07)) + .35 * vec2f(sin(t * 1.3 + ph * 3. + h * .3), cos(t * 1.1 + ph * 2. + h * .23)));
 }
 fn shape2(v: f32) -> f32 { return sin(3.14159 * sat(v)); }
 fn pal(h: f32) -> vec3f {
-  if (h < .3) { return vec3f(1., .62, .08); }
-  if (h < .6) { return vec3f(.12, 1., .22); }
-  if (h < .8) { return vec3f(.2, .85, 1.); }
-  return vec3f(1., .3, .8);
+  if (h < .3) { return vec3f(1., .72, .25); }
+  if (h < .6) { return vec3f(1., .95, .8); }
+  if (h < .8) { return vec3f(.6, 1., .5); }
+  return vec3f(.45, .8, 1.);
 }
 @vertex fn vs(@builtin(vertex_index) vi: u32, i: LI) -> LO {
   var o: LO;
@@ -410,14 +415,15 @@ fn pal(h: f32) -> vec3f {
   var col = vec3f(0.); var pr = vec4f(0.); var spc = vec3f(0.); var shp = vec2f(.75, .7); var wav = 1.; var fls = 1.;
   let hsel = hs(s1 * 13.7 + s2 * 71.3);
   switch ty {
-    case 0 { col = mix(vec3f(.11, .125, .022), vec3f(.04, .10, .04), s1); col = mix(col, vec3f(.25, .17, .025), step(.72, s2)); pr = vec4f(.24, .9, 0., 0.); spc = pal(hsel * .72); shp = vec2f(.5, .32); wav = 1.9; }
-    case 1 { col = vec3f(.10, .11, .035); pr = vec4f(0., .2, 0., 0.); shp = vec2f(.05, .1); wav = .3; fls = .3; }
-    case 2 { col = mix(vec3f(.05, .20, .16), vec3f(.12, .26, .22), s1); col = mix(col, vec3f(.30, .14, .24), step(.85, s2)); pr = vec4f(.05, 1.0, .25, 0.); spc = vec3f(.6, 1., .9); shp = vec2f(.45, .35); wav = 2.2; }
-    case 3 { col = mix(vec3f(.02, .05, .065), vec3f(.05, .03, .08), s1); col = mix(col, vec3f(.09, .03, .09), step(.8, s2)); pr = vec4f(.2, .85, .55, .02); spc = mix(vec3f(.5, .35, 1.), vec3f(.2, 1., .7), step(.6, hsel)); shp = vec2f(.7, .6); wav = 2.4; }
-    case 4 { col = mix(vec3f(.30, .15, .02), vec3f(.42, .25, .04), s1); pr = vec4f(.2, 1., .1, 0.); spc = vec3f(1., .85, .5); shp = vec2f(.5, .4); wav = 1.8; }
-    case 5 { col = mix(vec3f(.85, .05, .40), vec3f(.60, .10, .80), step(.7, s1)); col = mix(col, vec3f(.95, .25, .55), step(.75, s2)); pr = vec4f(.22, .8, 0., .30); spc = vec3f(1., .35, .8); shp = vec2f(.6, .6); fls = 2.; }
-    case 6 { col = mix(vec3f(.80, .16, .16), vec3f(.92, .36, .42), s1); pr = vec4f(.06, 1., 0., .10); spc = vec3f(1., .5, .5); shp = vec2f(.4, .3); wav = 2.; }
-    default { col = mix(vec3f(.05, .40, .36), vec3f(.10, .52, .58), s1); pr = vec4f(.1, .9, .2, .04); spc = vec3f(.3, 1., .9); shp = vec2f(.6, .5); }
+    // 0 tree leaf, 1 vine, 2 fern, 3 blue leaf (the glade), 4 golden leaf, 5 flower, 6 hanging moss, 7 grass
+    case 0 { col = mix(vec3f(.085, .19, .028), vec3f(.035, .12, .03), s1); col = mix(col, vec3f(.30, .21, .03), step(.78, s2)); pr = vec4f(.10, 1., 0., 0.); spc = pal(hsel * .72); shp = vec2f(.62, .5); wav = .7; }
+    case 1 { col = vec3f(.085, .06, .035); pr = vec4f(0., .1, 0., 0.); shp = vec2f(.05, .1); wav = .2; fls = .3; }
+    case 2 { col = mix(vec3f(.045, .17, .035), vec3f(.10, .25, .05), s1); col = mix(col, vec3f(.26, .17, .04), step(.88, s2)); pr = vec4f(.04, 1., 0., 0.); spc = vec3f(1., 1., .8); shp = vec2f(.45, .35); wav = 1.; }
+    case 3 { col = mix(vec3f(.02, .07, .10), vec3f(.04, .05, .13), s1); col = mix(col, vec3f(.03, .12, .12), step(.8, s2)); pr = vec4f(.2, .85, .5, .05); spc = mix(vec3f(.4, .6, 1.), vec3f(.3, 1., .9), step(.6, hsel)); shp = vec2f(.62, .5); wav = .8; }
+    case 4 { col = mix(vec3f(.34, .17, .02), vec3f(.46, .28, .04), s1); pr = vec4f(.1, 1., 0., 0.); spc = vec3f(1., .85, .5); shp = vec2f(.6, .45); wav = .7; }
+    case 5 { col = mix(vec3f(.85, .10, .45), vec3f(.55, .20, .85), step(.6, s1)); col = mix(col, vec3f(.95, .80, .25), step(.72, s2)); pr = vec4f(.15, .8, 0., .12); spc = vec3f(1., .7, .9); shp = vec2f(.6, .6); fls = 2.; }
+    case 6 { col = mix(vec3f(.16, .22, .10), vec3f(.24, .28, .15), s1); pr = vec4f(.03, 1., 0., 0.); spc = vec3f(1., 1., .8); shp = vec2f(.4, .3); wav = 1.2; }
+    default { col = mix(vec3f(.07, .24, .04), vec3f(.14, .34, .07), s1); pr = vec4f(.05, .9, 0., 0.); spc = vec3f(.9, 1., .7); shp = vec2f(.6, .5); }
   }
   pr.x = step(hs(s1 * 91.7 + s2 * 37.1 + i.b.x), pr.x);
   let k = (i.c.w - .3) * 2.0 + sin(t * (.8 + s1) * fls + s2 * 40. + hA * .25) * .10 * fls;
@@ -507,25 +513,34 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n
   let R = i.a.w; let t = g.cam.w;
   let ta = t * i.b.y + i.b.w * 6.3 + (h.x - .5) * (26. / R);
   let ph = i.b.w * 17.;
-  let P = i.a.xyz + vec3f(R * cos(ta), 2.2 * sin(3. * ta + ph), R * .6 * sin(ta));
-  let T = normalize(vec3f(-R * sin(ta), 6.6 * cos(3. * ta + ph), R * .6 * cos(ta))) * sign(i.b.y);
+  let P = i.a.xyz + vec3f(R * cos(ta), 1.3 * sin(3. * ta + ph), R * .6 * sin(ta));
+  let T = normalize(vec3f(-R * sin(ta), 3.9 * cos(3. * ta + ph), R * .6 * cos(ta))) * sign(i.b.y);
   let S = normalize(cross(vec3f(0., 1., 0.), T)); let Up = cross(T, S);
-  let off = S * ((h.y - .5) * 5. + sin(t * .6 + s * 40.) * .5) + Up * ((h.z - .5) * 3.2 + cos(t * .5 + s * 31.) * .4);
-  var l = i.p * i.b.z * (.75 + .5 * h.z);
-  l.z += sin(t * 9. + s * 50. + l.x * 5.) * .22 * (.25 * i.b.z - l.x);
+  let off = S * ((h.y - .5) * 6. + sin(t * 1.3 + s * 40.) * .8) + Up * ((h.z - .5) * 3.6 + cos(t * 1.7 + s * 31.) * .6 + sin(t * 4.1 + s * 77.) * .12);
+  var l = i.p * i.b.z * (.7 + .6 * h.z);
+  // the wings beat about the body: |z| is the distance out along a wing
+  let fa = sin(t * (9. + 6. * h.x) + s * 50.) * 1.05 + .25;
+  l = vec3f(l.x, l.y + abs(l.z) * sin(fa), l.z * cos(fa));
+  let ln = normalize(vec3f(0., cos(fa), -sign(i.p.z) * sin(fa)));
   let w = P + off + T * l.x + Up * l.y + S * l.z;
-  o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = T * i.n.x + Up * i.n.y + S * i.n.z; o.op = i.p; o.sd = s;
+  o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = T * ln.x + Up * ln.y + S * ln.z; o.op = i.p; o.sd = s;
   o.lt = shadow1(w);
   return o;
 }
-@fragment fn fsFish(i: VO) -> @location(0) vec4f {
-  let n = normalize(i.n); let L = g.sun.xyz; let V = normalize(g.cam.xyz - i.wp);
+@fragment fn fsFish(i: VO, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
+  var n = normalize(i.n); if (!ff) { n = -n; }
+  let L = g.sun.xyz;
   let z = zone(i.wp); let vv = vol(i.wp);
-  var alb = mix(vec3f(.50, .68, .80), vec3f(.10, .22, .40), ss(-.05, .2, i.op.y));
-  alb = mix(alb, vec3f(.95, .8, .3), step(.86, fract(i.sd * 7.7)) * .6);
+  let hue = fract(i.sd * 7.7); let az = abs(i.op.z);
+  var alb = vec3f(.95, .45, .06);
+  if (hue > .45) { alb = vec3f(.10, .42, .95); }
+  if (hue > .75) { alb = vec3f(.95, .93, .82); }
+  if (hue > .9) { alb = vec3f(.95, .85, .15); }
+  alb = mix(alb, vec3f(.03, .02, .02), max(ss(.26, .36, az + abs(i.op.x) * .25), ss(.03, .0, az)));
   let E = sunE(i.wp.y, z) * i.lt;
-  var c = alb * (E * (.25 + .75 * sat(dot(n, L))) + amb(i.wp, n, vv.g, z) * 1.3);
-  c += E * pow(sat(dot(n, normalize(V + L))), 24.) * 1.6 + vec3f(.3, .6, .7) * pow(1. - sat(dot(n, V)), 3.) * .25 * vv.g;
+  let ndl = dot(n, L);
+  var c = alb * (E * (.2 + .6 * abs(ndl) + .5 * max(-ndl, 0.)) + amb(i.wp, n, vv.g, z) * 1.5);
+  c += alb * mix(.02, .12, z);
   return fin(fog(c, i.wp, z));
 }
 @vertex fn vsManta(i: VI) -> VO {
@@ -538,13 +553,13 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n
   let bank = -.28 * sign(i.b.y);
   let S2 = S * cos(bank) + Up * sin(bank); Up = Up * cos(bank) - S * sin(bank); S = S2;
   let u = i.n.w; let au = abs(u);
-  let fp = t * 1.25 + i.b.w * 5. - au * 1.2;
-  let amp = .36 * pow(au, 1.6);
+  let fp = t * 2.4 + i.b.w * 5. - au * 1.2;
+  let amp = .42 * pow(au, 1.6);
   var l = i.p;
-  l.y += amp * sin(fp) - .1 * sin(t * 1.25 + i.b.w * 5.);
+  l.y += amp * sin(fp) - .06 * sin(t * 2.4 + i.b.w * 5.);
   let tail = ss(-.5, -1.9, l.z) * step(au, .001);
   l.x += tail * sin(t * .8 + l.z * 2.) * .12;
-  let sl = (.576 * pow(au, .6) * sin(fp) - .43 * pow(au, 1.6) * cos(fp)) * sign(u);
+  let sl = (.672 * pow(au, .6) * sin(fp) - .504 * pow(au, 1.6) * cos(fp)) * sign(u);
   let ln = normalize(vec3f(i.n.x - sl * i.n.y, i.n.y + sl * i.n.x, i.n.z));
   let w = P + (S * l.x + Up * l.y + T * l.z) * sz;
   o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = S * ln.x + Up * ln.y + T * ln.z; o.op = i.p; o.sd = i.b.w;
@@ -555,30 +570,25 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n
   let dist = length(i.wp - g.cam.xyz);
   let ca = caus(i.wp, dist);
   let tx = textureSample(tD, sR, i.op.xz * .9 + i.sd);
-  let n = normalize(i.n + (vec3f(tx.r, 0., tx.g) - vec3f(.5, 0., .5)) * .5); let L = g.sun.xyz; let V = normalize(g.cam.xyz - i.wp);
+  let n = normalize(i.n + (vec3f(tx.r, 0., tx.g) - vec3f(.5, 0., .5)) * .3); let L = g.sun.xyz; let V = normalize(g.cam.xyz - i.wp);
   let z = zone(i.wp); let vv = vol(i.wp);
   let top = ss(-.2, .25, normalize(i.n).y);
   let au = abs(i.op.x);
-  let gill = ss(.25, .0, abs(au - .13) * 8.) * ss(.04, .12, i.op.z) * ss(.34, .26, i.op.z) * ss(.2, .8, sin(i.op.z * 110.));
-  var belly = vec3f(.13, .17, .21) * (.6 + .6 * tx.b) * (1. - .7 * gill);
-  belly = mix(belly, vec3f(.05, .08, .11), sat(ss(.45, .9, au + tx.a * .35) + ss(-.1, -.4, i.op.z + tx.b * .2) * .7));
-  var back = vec3f(.04, .065, .10) + vec3f(.10, .16, .2) * ss(.5, .75, tx.a);
-  back = mix(back, vec3f(.36, .46, .52), ss(.25, .0, abs(au - .26) * 3.5 + abs(i.op.z - .12) * 5.) * .8);
-  var alb = mix(belly, back, top);
+  // pale plumage, dark flight feathers toward the wing tips
+  var alb = mix(vec3f(.60, .62, .60), vec3f(.82, .81, .76), top) * (.75 + .35 * tx.b);
+  alb = mix(alb, vec3f(.06, .06, .07), ss(.5, .95, au + tx.a * .15) * .9);
   let E = sunE(i.wp.y, z) * shadow4(i.wp + n * .3);
   let ndv = sat(dot(n, V));
-  let ir = .5 + .5 * cos(TAU * (vec3f(0., .33, .67) + ndv * 1.1 + tx.a * 1.5 + .55));
   let fillN = vec3f(n.x, abs(n.y) * .55 + .25, n.z);
   var c = alb * (E * sat(dot(n, L)) * (.3 + ca) + amb(i.wp, fillN, vv.g, z) * 1.1 + side(i.wp, n, 1., z) * .8);
-  c += ir * vec3f(.35, .16, .6) * (.07 + .22 * tx.b) * (.4 + E.g * .2 * ca.g) * (1. - top * .3);
-  c += E * pow(sat(dot(n, normalize(V + L))), 30.) * .5 * (.3 + ca);
+  c += E * pow(sat(dot(n, normalize(V + L))), 30.) * .2 * (.3 + ca);
   let sky = amb(i.wp, vec3f(0., 1., 0.), vv.g, z);
-  c += alb * sky * ca * .45 * (1. - top) + sky * pow(1. - ndv, 3.) * .35;
+  c += alb * sky * .45 * (1. - top) + sky * pow(1. - ndv, 3.) * .25;
   return fin(fog(c, i.wp, z));
 }
 `;
 
-// ---------------------------------------------------------------- water surface seen from below
+// ---------------------------------------------------------------- the mist ceiling seen from below
 const W_SURF = S_B + /*wgsl*/`
 struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f };
 @vertex fn vs(@builtin(vertex_index) i: u32) -> VO {
@@ -589,21 +599,14 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f };
   return o;
 }
 @fragment fn fs(i: VO) -> @location(0) vec4f {
-  let v = i.wp - g.cam.xyz; let d = length(v); let V = v / d;
-  let fl = ss(260., 60., d);
-  let s = (textureSample(tW, sR, i.wp.xz / 13.).ba + textureSample(tW, sR, i.wp.zx / 4.7 + .2).ba * .7 + textureSample(tW, sR, i.wp.xz / 37. + .6).ba * .8) * fl;
-  let n = normalize(vec3f(-s.x * .8, -1., -s.y * .8));
-  let ci = sat(dot(V, -n));
-  let k = 1. - 1.769 * (1. - ci * ci);
-  let win = ss(0., .22, k);
-  let rr = refract(V, n, 1.33);
-  let sd = max(dot(rr, g.sun.xyz), 0.);
-  let fr = pow(1. - sqrt(max(k, 0.)), 5.);
-  let sky = (vec3f(.30, .78, 1.) * 1.3 * clamp(1. + 3.8 * (s.x * .6 - s.y * .8), .25, 3.) + vec3f(1., .95, .85) * (pow(sd, 60.) * 1.3 + pow(sd, 500.) * 12.)) * (1. - fr);
+  let v = i.wp - g.cam.xyz; let V = normalize(v); let t = g.cam.w;
+  // brighter where the sun stands behind it, with slow darker drifts
+  let cl = textureSample(tD, sR, i.wp.xz / 310. + vec2f(t * .0011, t * .0007)).a * .6 + textureSample(tD, sR, i.wp.zx / 97. - vec2f(t * .002, 0.)).a * .4;
+  let sd = max(dot(V, g.sun.xyz), 0.);
   let z = zone(i.wp);
-  let R = reflect(V, n);
-  let refl = fogIn(i.wp, R, 300., z, g.sun.xyz) * 1.15;
-  let c = mix(refl, sky, win);
+  var c = mix(vec3f(.62, .74, .86), vec3f(1.25, 1.2, 1.08), ss(.38, .7, cl)) * 1.5;
+  c += vec3f(1., .82, .55) * (pow(sd, 12.) * 1.4 + pow(sd, 90.) * 5.);
+  c = mix(c, c * vec3f(.7, .9, 1.25), z);
   return fin(fog(c, i.wp, z));
 }
 // behind everything: where no terrain is drawn (it stops at ~240 m) the water looks as it does at that distance
@@ -620,7 +623,7 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f };
 }
 `;
 
-// ---------------------------------------------------------------- sprites: bubbles (alpha) and drifting particles (additive)
+// ---------------------------------------------------------------- sprites: rising spores and drifting motes (both additive)
 const W_SPR = S_B + /*wgsl*/`
 struct VO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @interpolate(flat) pr: vec4f, @location(2) wp: vec3f };
 fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
@@ -639,25 +642,14 @@ fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
   return o;
 }
 @fragment fn fsBub(i: VO) -> @location(0) vec4f {
-  let t = g.cam.w;
-  let an = atan2(i.uv.y, i.uv.x + 1e-4);
-  let big = ss(.04, .22, i.pr.y);
-  let r = length(i.uv) / (.9 + big * .05 * sin(an * 3. + t * 5. + i.pr.x * 40.) + big * .02 * sin(an * 5. - t * 7.));
-  let aa = fwidth(r) * 1.5;
-  let disc = 1. - ss(1. - aa, 1., r);
-  let rim = ss(.55, .98, r);
-  let hl = ss(.34, .0, length(i.uv - vec2f(-.36, .42))) + .5 * ss(.2, .0, length(i.uv - vec2f(.4, -.42)));
+  let r = length(i.uv);
   let z = zone(i.wp);
-  let E = sunE(i.wp.y, z) * (.25 + .75 * i.pr.z);
-  let hi = fogIn(i.wp, vec3f(0., 1., 0.), 80., z, g.sun.xyz) * 1.5;
-  let lo = fogIn(i.wp, vec3f(0., -1., 0.), 80., z, g.sun.xyz);
-  var c = mix(lo, hi, ss(-.5, .8, i.uv.y + rim * .4)) * (.5 + 1.2 * rim) + E * hl * 1.6;
-  var al = disc * sat(.03 + rim * rim * rim * .9 + hl);
-  let v = i.wp - g.cam.xyz; let d = length(v);
-  let T = exp(-SIG.g * d) * ss(1.2, 3., d);
-  c = c * T + fogIn(g.cam.xyz, v / d, d, z, g.sun.xyz) * (1. - T);
-  al *= mix(.35, 1., T);
-  return vec4f(min(max(c * al, vec3f(0.)), vec3f(20.)), al);
+  let m = exp(-r * r * 6.) * (1. - ss(.75, 1., r));
+  let E = sunE(i.wp.y, z) * (.15 + .85 * i.pr.z);
+  let tw = .6 + .4 * sin(g.cam.w * (1.5 + i.pr.x * 3.) + i.pr.x * 60.);
+  let c = (mix(vec3f(.85, 1., .45), vec3f(.45, .85, 1.), z) * .5 * tw + E * vec3f(1., .95, .8) * .5) * m;
+  let d = length(i.wp - g.cam.xyz);
+  return vec4f(min(c * exp(-SIG.g * d) * ss(.6, 2., d), vec3f(20.)), 0.);
 }
 @vertex fn vsSnow(@builtin(vertex_index) vi: u32, @location(0) a: vec4f) -> VO {
   var o: VO; let q = quad(vi); let t = g.cam.w;
@@ -718,7 +710,7 @@ const W_RAYS = S_G + W_FS + /*wgsl*/`
   }
   let mu = max(dot(rd, sx), 0.);
   let ph = mix(.2 + 2.0 * mu * mu * mu, .8, g.sun.w);
-  let wc = mix(WCOL + vec3f(.04, .07, .05), PCOL + vec3f(.28, .16, .12), g.sun.w);
+  let wc = mix(vec3f(1., .88, .62), vec3f(.7, .9, 1.1), g.sun.w);
   return vec4f(min(acc * dt * sgz * wc * SUNC * ph * g.mis.y * (1. - .55 * g.sun.w), vec3f(20.)), zl);
 }
 `;

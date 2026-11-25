@@ -3,6 +3,8 @@
 // ============================================================================
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), info = $('i'), body = document.body;
+// Chinese visitors get the page in Chinese: elements carry their translation in data-z
+if (ZH) { document.documentElement.lang = 'zh-Hant'; for (const e of document.querySelectorAll('[data-z]')) e.textContent = e.dataset.z; }
 // a phone held upright gets the page turned on its side (see template.html)
 const rot = matchMedia('(orientation:portrait) and (pointer:coarse)');
 // loading bar: each stage glides it to `to` (the share done) over ~`ms` on the compositor, so it moves while this
@@ -16,18 +18,38 @@ const say = (m, to, ms) => {
   return new Promise((r) => { a.ready.then(() => setTimeout(r)); setTimeout(r, document.hidden ? 0 : 1e3); });
 };
 const fail = (m) => { throw new Error(m, { cause: 1 }); }; // cause marks a message that is shown as it is
-if (!navigator.gpu) fail('This scene needs WebGPU. Try a current Chrome or Edge.');
-const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-if (!adapter) fail('No WebGPU adapter found.');
-$('w').hidden = !!navigator.userAgentData; // only Chromium-based browsers have it
+// The scene can't start: show why and what to do about it on this device (support.js), then stop
+const failWith = async (stage, err) => {
+  const d = await diagnose(stage, err), ol = document.createElement('ol'), y = document.createElement('p'), b = document.createElement('button');
+  ol.innerHTML = d.steps.map((t) => '<li>' + t).join(''); y.textContent = d.info;
+  b.textContent = tr('Check again', '重新檢查'); b.onclick = () => location.reload();
+  ol.onclick = (e) => { const c = e.target.closest('code'); if (c) navigator.clipboard?.writeText(c.textContent).then(() => { c.style.background = '#c9f78f66'; }, () => 0); };
+  $('x').replaceChildren(ol, b, y);
+  dead = body.className = 'l e'; $('s').textContent = d.head;
+  if (stage !== 'lost') fail(d.head);
+};
+const gpu = navigator.gpu;
+if (!gpu || /[?&]diag/.test(location.search)) await failWith(gpu ? 'diag' : 'nogpu');
+// the fast graphics chip if there are two, else any, else the browser's software renderer
+const ask = (o) => gpu.requestAdapter(o).catch(() => null);
+const adapter = await ask({ powerPreference: 'high-performance' }) || await ask() || await ask({ forceFallbackAdapter: true });
+if (!adapter) await failWith('noadapter');
+const ainfo = adapter.info || {}, soft = ainfo.isFallbackAdapter || adapter.isFallbackAdapter;
+{
+  // under the loading bar: leave an in-app browser, software rendering is slow, other engines than Chromium are slower
+  const w = $('w'), to = ENV.ios ? 'Safari' : 'Chrome';
+  if (ENV.inapp) w.textContent = tr(`For full screen and best speed, open this page in ${to}`, `建議改用 ${to} 開啟，可全螢幕且較順暢`);
+  else if (soft) w.textContent = tr('No graphics acceleration: running in software, this will be slow', '沒有圖形加速，正以軟體繪圖執行，會非常慢');
+  w.hidden = !ENV.inapp && !soft && (!!uad || ENV.ios);
+  $('v').textContent = 'WebGPU ✓ ' + [ainfo.vendor, ainfo.architecture || ainfo.device, soft && 'software'].filter(Boolean).join(' ');
+}
 const hasTS = adapter.features.has('timestamp-query');
-const device = await adapter.requestDevice({ requiredFeatures: hasTS ? ['timestamp-query'] : [] });
+const device = await adapter.requestDevice({ requiredFeatures: hasTS ? ['timestamp-query'] : [] }).catch((e) => failWith('nodevice', e));
 device.addEventListener('uncapturederror', (e) => console.error('GPU: ' + e.error.message));
 // out of memory or a GPU timeout: reload a level lower, or on Low say what happened
 device.lost.then((l) => {
   if (l.reason === 'destroyed') return; // the page is closing
-  if (LV < 2) { keep('abyssal', LV + 1); location.reload(); }
-  dead = body.className = 'l e'; $('s').textContent = 'The graphics device was lost. Reload the page to try again.';
+  if (LV < 2) { keep('abyssal', LV + 1); location.reload(); } else failWith('lost', l);
 });
 const ctx = canvas.getContext('webgpu'), FMT = navigator.gpu.getPreferredCanvasFormat();
 const Q = device.queue, HDR = 'rgba16float', DEPTH = 'depth32float';
@@ -94,7 +116,7 @@ const shadowPipe = (m, vsE, buffers, o = {}) => device.createRenderPipeline({ la
   primitive: { topology: o.strip ? 'triangle-strip' : 'triangle-list', cullMode: o.cull || 'none' },
   depthStencil: { format: DEPTH, depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 1.5 } });
 
-await say('Compiling shaders…', 0.05, 300);
+await say(tr('Compiling shaders…', '編譯著色器…'), 0.05, 300);
 const mSolid = mod(W_SOLID), mLeaf = mod(W_LEAF), mAnim = mod(W_ANIM), mSurf = mod(W_SURF), mSpr = mod(W_SPR);
 const pTerrain = scenePipe(mSolid, 'vs', 'fs', [vbSolid, ibSolid], { cull: 'back' });
 const pSolid = scenePipe(mSolid, 'vs', 'fs', [vbSolid, ibSolid]);
@@ -125,7 +147,7 @@ const pRays = device.createRenderPipeline({ layout: 'auto', vertex: { module: mR
 const pPost = device.createRenderPipeline({ layout: 'auto', vertex: { module: mPost, entryPoint: 'vs' }, fragment: { module: mPost, entryPoint: 'fs', targets: [{ format: FMT }] } });
 
 // ---------------------------------------------------------------- sun + shadow matrix
-const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((c) => c / l); })();
+const SUN = (() => { const v = [0.5, 1, -0.42], l = hypot(...v); return v.map((c) => c / l); })();
 {
   const L = SUN, lr = [L[1], -L[0], 0], ll = hypot(...lr); lr[0] /= ll; lr[1] /= ll;
   const lu = [L[1] * lr[2] - L[2] * lr[1], L[2] * lr[0] - L[0] * lr[2], L[0] * lr[1] - L[1] * lr[0]];
@@ -141,7 +163,7 @@ const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((
 }
 
 // ---------------------------------------------------------------- world generation
-await say('Sculpting the seabed…', 0.25, 1200);
+await say(tr('Raising the hills…', '堆起山丘…'), 0.25, 1200);
 // marks a load in progress (quality.js); leaving the page before it ends is not a crash
 keep('abyssalLoad', 1);
 addEventListener('pagehide', () => keep('abyssalLoad', ''));
@@ -190,45 +212,47 @@ let CG = new Int8Array(64 * 65534);
   }
   CG = CG.slice(0, n * 64);
 }
-await say('Carving canyons…', 0.32, 400);
+await say(tr('Carving the ravine…', '鑿出峽谷…'), 0.32, 400);
 const T = buildTerrain(D);
+// the three tree shapes: built first, the world generator hangs the foliage on their branch tips
+const TREES = [0, 1, 2].map(meshTree);
 
 // preset viewpoints (position, look-at), keys 1-6; the world generator dresses the scene around them
 const POSES = [
-  [10, 1.3, 7, -9, -31, -10],
-  [50, 1.3, 34, 58, -23, 8],
-  [-26, 2.2, -100, 0, -9, -108],
-  [-55, 1.5, -18, -60, -30, 8],
-  [10, 1.2, -62, 6, -22, -90],
-  [3, 1.6, 62, 1, -28, 100],
+  [20, 1.6, 18, -4, -24, -8],       // the elder tree
+  [-30, 2.2, 23, -44, -35, 30],     // shrine gate
+  [-10, 1.6, -30, -14, -36, -56],   // moss arch
+  [-44, 1.3, -38, -62, -41, -50],   // mushroom grove
+  [2, 1.5, 56, 10, -35, 90],        // blue glade
+  [71, 2, 12, 68.5, -38, -26],      // ravine and rock bridge
 ];
 // 60 s camera path (position + look-at, Catmull-Rom): the world generator keeps it clear, dev.js flies along it
 const FLY = new Float32Array([
-  10, -42.2, 7, -9, -31, -10,
-  7.5, -41.8, 5.5, -10, -31, -12,
-  9, -40.5, 18, 17, -37, 42,
-  22, -39.2, 40, 48, -36, 45,
-  38, -39.2, 46, 57, -27, 18,
-  50, -40.4, 35, 58, -24, 8,
-  55, -39, 20, 60, -18, -10,
-  58, -34, -12, 40, -26, -60,
-  50, -30, -44, 10, -26, -80,
-  30, -30, -70, 4, -28, -90,
-  12, -38.5, -62, 6, -27, -90,
-  -4, -36.5, -70, 0, -14, -100,
-  -16, -37, -84, 0, -22, -108,
-  -29, -38, -90, -44, -34, -60,
-  -41, -38, -70, -56, -34, -40,
-  -53, -38, -50, -60, -34, -20,
-  -58, -38, -28, -60, -32, 0,
-  -57, -38, -10, -60, -30, 16,
-  -60, -38, 10, -50, -36, 40,
-  -52, -37, 36, -20, -35, 44,
-  -22, -38, 43, 4, -38, 52,
-  -6, -39.2, 44.5, 4, -37, 70,
-  3, -40.6, 53, 3, -35, 84,
-  3, -41.5, 62, 1, -30, 100,
-  4, -39, 76, 3, -22, 100,
+  20, -41, 18, -4, -24, -8,
+  14, -40, 12, -4, -26, -8,
+  4, -38, 12, -30, -36, 24,
+  -14, -38, 18, -44, -36, 30,
+  -26, -37, 22, -44, -35, 30,
+  -34, -35, 14, -40, -38, -20,
+  -30, -37, -6, -20, -38, -40,
+  -16, -39, -24, -14, -36, -56,
+  -14, -39, -44, -14, -38, -70,
+  -16, -40, -58, -40, -40, -56,
+  -32, -39, -52, -62, -41, -50,
+  -46, -40, -42, -62, -41, -50,
+  -50, -34, -60, -10, -36, -74,
+  -20, -33, -74, 30, -36, -64,
+  20, -34, -68, 62, -38, -52,
+  50, -37, -58, 66, -38, -40,
+  66, -38, -48, 68, -37, -26,
+  68, -39, -34, 69, -39, 0,
+  69, -39, -12, 62, -38, 20,
+  64, -38, 10, 30, -36, 30,
+  40, -36, 22, 10, -36, 50,
+  18, -37, 36, 6, -36, 70,
+  6, -39, 50, 10, -35, 90,
+  4, -40, 62, 10, -34, 92,
+  8, -37, 78, 10, -26, 100,
 ]);
 const FLYN = FLY.length / 6, FLYT = 60, LUTN = 1024, flyLUT = new Float32Array(LUTN + 1);
 const flyPts = [];
@@ -266,21 +290,21 @@ function flyAt() {
 for (let t = 0; t <= FLYT; t += 0.1) { F[FLT] = t; flyAt(); flyPts.push([F[CX], F[CY], F[CZ]]); }
 for (const p of POSES) flyPts.push([p[0], -40, p[2]]);
 
-await say('Growing kelp…', 0.73, 2500);
+await say(tr('Growing the forest…', '種下森林…'), 0.73, 2500);
 const Wd = makeWorld(D, T, flyPts, POSES);
 for (const p of POSES) p[1] += Wd.gy(p[0], p[2]);
 D = Wd.gy = T.smp = null; // with gy goes the generator's working memory (about 200 MB)
 
-await say('Building set pieces…', 0.94, 1200);
-// mesh ids: 0-3 boulders, 4-6 sponges, 7-8 coral, 9 tube sponge, 10 whale fluke, 11 ship, 12 manta, 13 fish,
-// 14-20 rock chunks + pebbles, 21-22 coral LOD, 23-25 far LOD of the large rock chunks
+await say(tr('Raising the elder tree…', '立起神木…'), 0.94, 1200);
+// mesh ids: 0-3 boulders, 4-6 mushrooms, 7-8 coral fungus, 9 tube fungus, 10 elder tree, 11 shrine gate, 12 bird,
+// 13 butterfly, 14-20 rock chunks + stones, 21-22 coral fungus LOD, 23-25 far LOD of the large rock chunks, 26-28 trees
 const meshes = [meshChunk(1, 3), meshChunk(7, 3), meshChunk(13, 3), meshChunk(22, 3),
-  meshLathe([[0, 0, 0.5], [0.34, 0, 0.6], [0.5, 0.2, 0.85], [0.6, 0.6, 1], [0.55, 0.95, 1], [0.47, 1.08, 1], [0.38, 1.1, 0.9], [0.3, 1.0, 0.45], [0.26, 0.6, 0.15], [0, 0.35, 0.05]], 18, 0.3, 9),
-  meshLathe([[0, 0, 0.5], [0.2, 0, 0.6], [0.26, 0.5, 0.85], [0.4, 1.25, 1], [0.4, 1.42, 1], [0.33, 1.48, 0.9], [0.26, 1.38, 0.4], [0.18, 0.8, 0.12], [0, 0.5, 0.05]], 16, 0.35, 8),
-  meshLathe([[0, 0, 0.5], [0.5, 0, 0.7], [0.72, 0.18, 1], [0.74, 0.38, 1], [0.62, 0.5, 0.9], [0.48, 0.42, 0.45], [0.4, 0.2, 0.15], [0, 0.14, 0.06]], 18, 0.25, 10),
+  meshLathe([[0, 0, 0.4], [0.13, 0, 0.5], [0.10, 0.25, 0.6], [0.09, 0.62, 0.5], [0.16, 0.66, 0.3], [0.52, 0.62, 0.35], [0.60, 0.68, 0.8], [0.50, 0.86, 1], [0.30, 0.98, 1], [0, 1.03, 1]], 18, 0.16),
+  meshLathe([[0, 0, 0.4], [0.07, 0, 0.5], [0.055, 0.6, 0.6], [0.05, 1.15, 0.5], [0.10, 1.18, 0.3], [0.26, 1.12, 0.35], [0.30, 1.2, 0.8], [0.24, 1.42, 1], [0.10, 1.56, 1], [0, 1.6, 1]], 16, 0.16),
+  meshLathe([[0, 0, 0.4], [0.16, 0, 0.5], [0.13, 0.2, 0.6], [0.12, 0.36, 0.5], [0.3, 0.4, 0.3], [0.74, 0.4, 0.35], [0.80, 0.45, 0.8], [0.6, 0.55, 1], [0.3, 0.6, 1], [0, 0.58, 0.95]], 18, 0.2),
   meshCoral(0), meshCoral(1), meshTubes()].map((m) => m.build());
-meshes.push(meshFluke(), meshShip().build(), meshManta().build(), meshFish().build(),
-  meshChunk(3).build(), meshChunk(11).build(), meshChunk(29).build(), meshChunk(5, 3).build(), meshChunk(17, 3).build(), meshChunk(41, 3).build(), meshChunk(9, 1).build(), meshCoral(0, 1).build(), meshCoral(1, 1).build(), meshChunk(5, 2, 1).build(), meshChunk(17, 2, 1).build(), meshChunk(41, 2, 1).build());
+meshes.push(meshElder(), meshGate().build(), meshManta().build(), meshFish().build(),
+  meshChunk(3).build(), meshChunk(11).build(), meshChunk(29).build(), meshChunk(5, 3).build(), meshChunk(17, 3).build(), meshChunk(41, 3).build(), meshChunk(9, 1).build(), meshCoral(0, 1).build(), meshCoral(1, 1).build(), meshChunk(5, 2, 1).build(), meshChunk(17, 2, 1).build(), meshChunk(41, 2, 1).build(), ...TREES.map((t) => t.m.build()));
 let nV = 0, nI = 0;
 for (const m of meshes) { m.v0 = nV; m.i0 = nI; nV += m.nv; nI += m.ib.length; }
 const allV = new Uint8Array(nV * 16), allI = new Uint32Array(nI);
@@ -290,7 +314,7 @@ const vbTerrain = buf(new Uint8Array(T.vb), BU.VERTEX), ibTerrain = buf(T.ib, BU
 const nSolid = Wd.solids.data.length / 12;
 const solidData = new Float32Array((nSolid + 1) * 12); solidData.set(Wd.solids.data); solidData.set([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0], nSolid * 12);
 const ibSolids = buf(solidData, BU.VERTEX);
-const ibChunk = Wd.chunks.map((c) => buf(c.data, BU.VERTEX)), ibProp = Wd.props.map((c) => buf(c.data, BU.VERTEX));
+const ibChunk = Wd.chunks.map((c) => buf(c.data, BU.VERTEX)), ibProp = Wd.props.map((c) => buf(c.data, BU.VERTEX)), ibTree = Wd.trees.map((c) => buf(c.data, BU.VERTEX));
 const ibBig = buf(new Uint8Array(Wd.big.buf), BU.VERTEX), ibBigF = buf(new Uint8Array(Wd.bigF.buf), BU.VERTEX), ibSmall = buf(new Uint8Array(Wd.small.buf), BU.VERTEX);
 const ibFish = buf(Wd.fish, BU.VERTEX), ibManta = buf(Wd.mantas, BU.VERTEX), ibBubbles = buf(Wd.bubbles, BU.VERTEX), ibSnowB = buf(Wd.snow, BU.VERTEX);
 const ibGl = buf(Wd.glints, BU.VERTEX), nGl = Wd.glints.length / 8;
@@ -319,12 +343,13 @@ Q.writeTexture({ texture: tMap }, Wd.gm, { bytesPerRow: 2048 }, [512, 512]);
   // small rocks, sponges and corals (~35M triangles) only on High: too much for a phone's driver
   if (!LV) for (let i = 0; i < NCHUNK; i++) { r.setVertexBuffer(1, ibChunk[i]); r.drawIndexed(meshes[14 + i].ib.length, Wd.chunks[i].n, meshes[14 + i].i0, meshes[14 + i].v0, 0); }
   if (!LV) for (let i = 0; i < 6; i++) if (Wd.props[i].n) { r.setVertexBuffer(1, ibProp[i]); r.drawIndexed(meshes[4 + i].ib.length, Wd.props[i].n, meshes[4 + i].i0, meshes[4 + i].v0, 0); }
+  for (let i = 0; i < 3; i++) if (Wd.trees[i].n) { r.setVertexBuffer(1, ibTree[i]); r.drawIndexed(meshes[26 + i].ib.length, Wd.trees[i].n, meshes[26 + i].i0, meshes[26 + i].v0, 0); }
   r.setPipeline(pLeafSh); r.setVertexBuffer(0, ibBig); r.draw(6, Wd.big.n);
   r.end();
   Q.submit([e.finish()]);
 }
 // the GPU has its own copies now: let go of the generator's (about 300 MB)
-for (const o of [Wd.big, Wd.bigF, Wd.small, ...Wd.chunks, ...Wd.props]) o.buf = o.data = 0;
+for (const o of [Wd.big, Wd.bigF, Wd.small, ...Wd.chunks, ...Wd.props, ...Wd.trees]) o.buf = o.data = 0;
 Wd.glints = Wd.volD = Wd.gm = T.vb = T.ib = T.wp = T.wn = 0;
 
 // ---------------------------------------------------------------- render targets (rebuilt on resize)
@@ -470,9 +495,10 @@ function render() {
     drawCells(r, Wd.props[i].start, Wd.props[i].lo, Wd.props[i].hi, 3, meshes[4 + i], 0, 0, lod ? 6 : 110);
     if (lod) drawCells(r, Wd.props[i].start, Wd.props[i].lo, Wd.props[i].hi, 3, meshes[18 + i], 0, 6, 110);
   }
+  for (let i = 0; i < 3; i++) { r.setVertexBuffer(1, ibTree[i]); drawCells(r, Wd.trees[i].start, Wd.trees[i].lo, Wd.trees[i].hi, 14, meshes[26 + i], 0, 0, 165); }
   r.setPipeline(pManta); r.setVertexBuffer(1, ibManta); r.drawIndexed(MANTA.ib.length, nManta, MANTA.i0, MANTA.v0, 0);
   r.setPipeline(pFish); r.setVertexBuffer(1, ibFish); r.drawIndexed(FISH.ib.length, nFish, FISH.i0, FISH.v0, 0);
-  // kelp and plants: 9-row blades up close, 5 rows mid-range, a decimated set far away
+  // leaves and plants: 9-row blades up close, 5 rows mid-range, a decimated set far away
   r.setPipeline(pLeaf); r.setVertexBuffer(0, ibBig); drawCells(r, Wd.big.start, Wd.big.lo, Wd.big.hi, 5, false, 18, 0, 24);
   r.setPipeline(pLeaf5); drawCells(r, Wd.big.start, Wd.big.lo, Wd.big.hi, 5, false, 10, 24, 58);
   r.setPipeline(pLeafF); r.setVertexBuffer(0, ibBigF); drawCells(r, Wd.bigF.start, Wd.bigF.lo, Wd.bigF.hi, 5, false, 6, 58, 150);
@@ -624,7 +650,7 @@ const ui = (m) => {
   if (m) { release(); setTimeout(() => menu && bDive.focus(), 100); } else document.activeElement.blur();
 };
 const go = () => {
-  sound(); ui(false); bDive.textContent = 'Resume';
+  sound(); ui(false); bDive.textContent = tr('Resume', '繼續');
   // phones: go fullscreen and ask for landscape; where that is refused the CSS rotation still applies
   if (mob) document.documentElement.requestFullscreen?.()?.then(() => screen.orientation.lock('landscape')).catch(() => 0);
   if (!mob) capture();
@@ -636,7 +662,7 @@ document.addEventListener('pointerlockchange', () => ui(!document.pointerLockEle
 
 // draw the first frame and wait for the GPU to finish it (pipelines get compiled on first use) before the reveal
 lookAt(...POSES[0]);
-await say('Letting the light in…', 1, 400);
+await say(tr('Letting the light in…', '讓晨光照進來…'), 1, 400);
 render(); await Q.onSubmittedWorkDone();
 setTimeout(keep, 15e3, 'abyssalLoad', ''); // the load counts as survived after 15 s of frames
 ui(true);

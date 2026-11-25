@@ -1,77 +1,116 @@
-# Abyssal Garden
+# Mistwood 霧林
 
-**A dreamy underwater world you can swim through, right in your browser.**
+**晨霧裡的巨木森林，直接在瀏覽器裡飛行穿梭。**
 
-Towering kelp forests, sunbeams pouring through a rippling surface, a sunken ship, manta rays gliding overhead.
-And all of it is made by code: no images, no 3D models, no sound files. The whole world fits in **one 96 KB HTML file**.
+參天巨木、穿過樹冠的光柱、苔蘚拱門、蘑菇林、朱紅鳥居、蝴蝶群與白鳥。
+全部由程式產生：沒有圖片、沒有 3D 模型、沒有音檔。整個世界是**一個約 106 KB 的 HTML 檔**（gzip 約 43 KB）。
 
-![Kelp forest with a stone whale tail and a manta ray](.github/screenshots/whale-fluke.jpg)
+**線上試玩：<https://weilee10334.github.io/abyssal-garden/>**
 
-## Try it
+![神木](.github/screenshots/elder.jpg)
 
-1. Download [`index.html`](index.html).
-2. Open it in **Chrome** or **Edge** on a desktop computer.
-3. Wait a few seconds while the world is built, then press **Dive in** and start swimming.
+> 本專案 fork 自 [Noniv/abyssal-garden](https://github.com/Noniv/abyssal-garden)（MIT 授權）。
+> 原作是海底世界；這裡沿用它的架構與 renderer，換成一個全新的森林場景，並加上裝置支援度診斷。
 
-Nothing to install, and it works offline. It needs a browser with **WebGPU**. If you see *"This scene needs WebGPU"*, update your browser or switch to Chrome / Edge.
+## 怎麼開
 
-## What's down there
+1. 直接開上面的網址，或下載 [`index.html`](index.html) 用瀏覽器開啟。
+2. 等幾秒讓世界生成，按 **走進森林**。
 
-- **Kelp forests** that sway in the current and sparkle with tiny gold and green specks
-- **Light rays** streaming down from a wavy surface, with shimmering caustics on the sea floor
-- **A sunken wooden ship**, a **giant stone whale tail**, rock arches, canyons and floating boulders
-- **Manta rays**, schools of fish, rising bubbles and drifting particles
-- **A purple grotto** with glowing magenta ground cover, coral and barrel sponges
-- **A soundscape** made up as you listen: a deep rumble, distant whale calls, soft chimes and bubbles
+不需安裝，離線也能跑。需要支援 **WebGPU** 的瀏覽器。
+
+## 裝置支援與診斷
+
+WebGPU 用的是裝置本身的 GPU，所以能不能跑取決於瀏覽器、作業系統與繪圖晶片，而不是這個 HTML 檔。
+
+| 平台 | 需求 |
+|---|---|
+| 電腦 Chrome / Edge | 113 以上 |
+| Android Chrome | Chrome 121 以上、Android 12 以上，且繪圖晶片在 Chrome 核可名單內 |
+| iPhone / iPad | iOS / iPadOS 26 以上（所有瀏覽器皆同） |
+| Firefox | Windows 141 以上、Apple 晶片 Mac 145 以上；Android 尚未預設開啟 |
+| Safari（Mac） | 26 以上 |
+
+無法啟動時，頁面不會只顯示「不支援」，而是依偵測結果列出這台裝置該怎麼做，例如：
+
+- iPhone：需要更新到 iOS 26，或在 iOS 17.4–18 的 Safari 功能旗標開啟 WebGPU 預覽。
+- Android：Chrome 太舊就提示更新；版本夠新但晶片不在核可名單時，引導開啟 `chrome://flags/#enable-unsafe-webgpu`（點網址可複製）。
+- LINE、Facebook 等 App 內建瀏覽器：提示改用 Chrome 或 Safari 開啟。
+- 有 WebGPU 但拿不到繪圖裝置：提示檢查圖形加速設定，並判斷是否只支援 OpenGL ES 相容模式。
+- 頁面底部附一行裝置資訊，方便回報問題。
+
+在網址後面加上 `?diag`，可以在支援的裝置上預覽這份診斷報告。
+
+可以啟動時，選單底部會顯示偵測到的繪圖晶片；若是在 App 內建瀏覽器或軟體繪圖模式下執行，載入時會提示。
+
+## 場景
 
 | | |
 |---|---|
-| ![Shipwreck](.github/screenshots/shipwreck.jpg) | ![Looking up through the kelp](.github/screenshots/kelp-forest.jpg) |
-| ![Barrel sponges](.github/screenshots/sponge-garden.jpg) | ![Light rays over the kelp basin](.github/screenshots/light-rays.jpg) |
+| ![鳥居](.github/screenshots/shrine-gate.jpg) | ![苔蘚拱門](.github/screenshots/moss-arch.jpg) |
+| ![蘑菇林](.github/screenshots/mushroom-grove.jpg) | ![藍色林地](.github/screenshots/blue-glade.jpg) |
 
-![The purple grotto](.github/screenshots/purple-grotto.jpg)
+![峽谷與石橋](.github/screenshots/ravine.jpg)
 
-## Controls
+- **巨木**：約 1,900 棵、三種樹形，樹幹是網格，約 160 萬片葉子掛在枝梢上
+- **神木**：中央林地的巨樹，由膠囊 SDF 轉成網格
+- **光**：穿過樹冠的光柱、地面的樹影光斑、霧氣隨距離變濃
+- **地形**：丘陵、岩壁、苔蘚拱門、峽谷與石橋、隧道
+- **蘑菇林、珊瑚菌、花毯、蕨類、垂掛的苔蘚**
+- **生物**：蝴蝶群、白鳥、上升的孢子、飄浮的微塵
+- **藍色林地**：光與霧偏冷，樹葉帶虹彩
+- **聲音**：即時合成的風聲、樹冠沙沙聲與鳥鳴
 
-| | Keyboard & mouse |
+## 操作
+
+| | 鍵盤與滑鼠 |
 |---|---|
-| Look around | Move the mouse |
-| Swim | `W` `A` `S` `D` |
-| Up / down | `E` / `Q` |
-| Swim faster | Hold `Shift` |
-| Jump to a viewpoint | `1` to `6` (the spots in the screenshots) |
-| Menu | `Esc` releases the mouse and opens the menu with the list of controls; **Resume** takes you back |
-| Sound on / off | `M` (sound starts when you dive in) |
-| Performance stats | `H` |
-| Detail level | **Low**, **Medium** or **High** in the menu (reloads the page) |
+| 環顧 | 移動滑鼠 |
+| 移動 | `W` `A` `S` `D` |
+| 上升 / 下降 | `E` / `Q` |
+| 加速 | 按住 `Shift` |
+| 跳到景點 | `1` 到 `6`（即上面的截圖位置） |
+| 選單 | `Esc` |
+| 靜音 | `M` |
+| 效能數據 | `H` |
+| 畫質 | 選單中的 **低**、**中**、**高**（會重新載入） |
 
-The seabed, cliffs and arches are solid: you glide along the rock instead of swimming into it, and you still fit through every tunnel and arch. Kelp, plants, corals, sponges, loose rocks, the floating boulders, the ship and the whale tail you can swim through.
+地面與岩壁是實心的；樹、蘑菇與鳥居可以穿過去。
 
-**On a touchscreen:** hold one finger down to swim forward and slide it to steer. Put a second finger down to go faster. The `≡` button in the corner opens the menu. Phones always show the scene in landscape and start on Low or Medium detail. (Touch support is experimental.)
+**觸控螢幕：**單指按住前進、滑動轉向，第二指加速，角落的 `≡` 開啟選單。手機一律以橫向顯示。（觸控為實驗性功能。）
 
-## Detail levels
+介面依瀏覽器語言顯示中文或英文。
 
-The **Low**, **Medium** and **High** buttons in the menu pick the detail level; the current one is lit. Each level is the same world, built with less in it:
+## 畫質等級
 
-| Level | What it is | Picked on a first visit for |
+| 等級 | 內容 | 首次造訪時 |
 |---|---|---|
-| **High** | The full scene | Computers |
-| **Medium** | Half of the leaves, sparkles and pebbles; small rocks, sponges and corals cast no shadows | Phones with 8 GB of memory |
-| **Low** | A quarter of the leaves, no anti-aliasing, coarser rocks and corals, simpler lighting, 480p to start with | Other phones, and computers with 4 GB of memory or less |
+| **高** | 完整場景 | 電腦 |
+| **中** | 葉子、光點、石頭減半；小石頭與蘑菇不投影 | 記憶體 8 GB 的手機 |
+| **低** | 葉子剩四分之一、無反鋸齒、較粗的網格與光照，起始 480p | 其他手機、記憶體 4 GB 以下的電腦 |
 
-If loading crashes the tab, or the graphics driver gives up, the page starts again one level lower. Your browser remembers the level, and the resolution and draw distance the scene settled on, for the next visit.
+載入時分頁崩潰或繪圖驅動中斷，下次會自動降一級。執行中以 60 fps 為目標，依序調降解析度與繪製距離。
 
-## How it works
+## 與原作的差異
 
-- The seabed is sculpted on your graphics card every time the page opens, then decorated with about two million kelp leaves and plants, tens of thousands of rocks, and thousands of sponges, corals and fish.
-- Everything is drawn with **WebGPU** directly. No game engine or 3D library is used.
-- The ship, whale tail, mantas, fish and corals are built from simple mathematical shapes.
-- The sound is synthesized live with the Web Audio API.
-- It's built to run smoothly: about 180 fps at 2560×1440 on an RTX 5070 Ti. On slower hardware it aims for 60 fps by lowering first the resolution and then how far away plants and rocks are drawn, in small steps. The scene is already running, blurred, behind the start menu, so most of that tuning is done before you dive in. A low-end phone (Samsung Galaxy A16) reaches about 20 fps at 670×372 on Low.
+沿用不變的部分：GPU compute 產生地形密度場、surface nets、instance 葉片、烘焙陰影與天光體積、半解析度體積光、bloom、格狀剔除、動態解析度、碰撞。
 
-## Make it your own
+改動的部分：
 
-The readable source code is in the [`source`](source) folder. To change something and rebuild `index.html` you need [Node.js](https://nodejs.org) 18 or newer:
+| 檔案 | 改了什麼 |
+|---|---|
+| [`source/src/world.js`](source/src/world.js) | 全新的世界佈局；海帶柱改為樹（`meshTree` 樹幹網格 + 枝梢葉叢）；神木、鳥居、蘑菇、鳥、蝴蝶的網格 |
+| [`source/src/shaders.js`](source/src/shaders.js) | 水的吸收改為霧；焦散改為樹影光斑；水面改為霧頂；樹皮、蘑菇、土壤與苔蘚材質；葉片配色；蝴蝶拍翅 |
+| [`source/src/main.js`](source/src/main.js) | 太陽角度、六個景點與飛行路徑、樹幹的繪製與陰影、啟動流程改為診斷式 |
+| [`source/src/support.js`](source/src/support.js) | 新增：裝置支援度診斷與中英文切換 |
+| [`source/src/audio.js`](source/src/audio.js) | 海底環境音改為森林環境音 |
+| [`source/template.html`](source/template.html) | 配色、文字、診斷報告的版面 |
+
+[`prompt.txt`](prompt.txt) 是原作海底場景的原始 prompt，保留供參考。
+
+## 自己改
+
+需要 [Node.js](https://nodejs.org) 18 以上：
 
 ```bash
 cd source
@@ -79,28 +118,21 @@ npm install
 npm run build
 ```
 
-This writes a new `index.html` next to this README. `npm run build:readable` writes an unminified version instead, which is easier to debug in the browser's developer tools.
+會在 README 旁產生新的 `index.html`。`npm run build:readable` 產生未壓縮版本；`npm run build:dev` 產生 `dev.html`，多了 `F`（沿路徑飛行）、`B`（效能測試），以及用網址指定鏡頭：`dev.html#x,y,z,tx,ty,tz`。
 
-`npm run build:dev` writes a separate `dev.html` with two extra tools that are not part of `index.html`: `F` flies the camera along a one-minute path through the whole world, and `B` runs that flight as a benchmark and reports frame and GPU times.
+幾個容易下手的地方：
 
-| File | What's inside |
-|---|---|
-| [`source/src/world.js`](source/src/world.js) | The world layout: rock walls, arches, tunnels, kelp forests, sponge gardens, fish schools, mantas, the ship and the whale tail. **A good place to start.** |
-| [`source/src/shaders.js`](source/src/shaders.js) | The look: water and fog colors, lighting, kelp, rocks, the water surface and light rays (WGSL shader code) |
-| [`source/src/main.js`](source/src/main.js) | The renderer, the camera, the controls, the six viewpoints and the camera path the world is laid out around |
-| [`source/src/audio.js`](source/src/audio.js) | The soundscape |
-| [`source/src/quality.js`](source/src/quality.js) | The detail levels: which one a device starts on, and what is remembered between visits |
-| [`source/src/math.js`](source/src/math.js) | Noise, random numbers and mesh-building helpers |
-| [`source/src/dev.js`](source/src/dev.js) | Development tools (fly-through and benchmark), only in `dev.html` |
-| [`source/template.html`](source/template.html) | The page around the scene: loading bar, start menu, links and their styles |
+- **霧與光的顏色**：`shaders.js` 開頭的 `WCOL`（霧）、`SUNC`（陽光）、`SIG`（霧的濃度）
+- **世界佈局**：`world.js` 開頭的 `MESAS`（岩壁）、`ARCHES`（拱門）、`HOLES`（隧道）
+- **樹的密度**：`world.js` 的 `KELPZ`（樹林）與 `NOKELP`（空地）
+- **亮度與光柱**：`main.js` 的 `EXPO` 與 `RAYS`
 
-Some easy first tweaks:
+## 已知限制
 
-- **Water color:** `WCOL` (blue-green water) and `PCOL` (purple grotto) near the top of the shared scene code in `shaders.js`
-- **Sunlight color:** `SUNC` right next to them
-- **Brightness and light rays:** `EXPO` and `RAYS` in `main.js`
-- **Swimming speed:** search for `26 : 7` in `main.js` (fast speed : normal speed)
+- 截圖是在無 GPU 的環境以軟體繪圖產生；實機的畫面與幀率尚待驗證。
+- iPhone 上的 WebGPU 未實測。
+- 每次開啟都要重新生成世界，載入期間記憶體用量高，記憶體小的手機可能失敗。
 
-## License
+## 授權
 
-[MIT](LICENSE): free to use, change and share, including in your own projects.
+[MIT](LICENSE)。原作 © Noniv；本 fork 的修改同樣以 MIT 釋出。

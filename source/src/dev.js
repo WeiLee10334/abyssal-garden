@@ -25,6 +25,10 @@
     }
     draw();
   };
+  // dev.html#x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz
+  const hash = () => { const h = location.hash.slice(1).split(',').map(Number); if (h.length === 6 && !h.some(isNaN)) lookAt(...h); };
+  addEventListener('hashchange', hash); hash();
+  console.log('leaves', Wd.big.n, 'far', Wd.bigF.n, 'small', Wd.small.n, 'trees', Wd.trees.map((t) => t.n).join('+'), 'glints', nGl, 'terrain tris', T.start[256] * 2, 'props', Wd.props.map((t) => t.n).join('+'));
   addEventListener('keydown', (e) => {
     if (menu || e.repeat) return;
     if (e.code === 'KeyF' || e.code === 'KeyB') {
